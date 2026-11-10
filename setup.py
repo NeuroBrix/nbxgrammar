@@ -3,6 +3,7 @@ library placed inside the package. The library is a C ABI loaded with ctypes, no
 platform serves every Python 3: tagged py3-none-<platform>. NBXGRAMMAR_CARGO_TARGET names a cross target (macOS x86_64
 built on arm64: x86_64-apple-darwin); unset, the host's."""
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -47,8 +48,10 @@ class PlatformWheel(bdist_wheel):
         if sys.platform == "darwin":                  # the macOS the library is built for, not the build Python's
             major, minor = (os.environ.get("MACOSX_DEPLOYMENT_TARGET", "11.0").split(".") + ["0"])[:2]
             target = os.environ.get("NBXGRAMMAR_CARGO_TARGET", "")
+            # the library's arch: the cross target's when one is named, else the HOST's — the build Python may be a
+            # universal2 build whose own tag names neither arch (the CI's macos-15-intel runner: tagged arm64 before)
             arch = "x86_64" if target.startswith("x86_64") else "arm64" if target.startswith("aarch64") \
-                else plat.rsplit("_", 1)[-1] if plat.endswith(("arm64", "x86_64")) else plat
+                else platform.machine()
             plat = f"macosx_{major}_{minor}_{'x86_64' if arch.endswith('x86_64') else 'arm64'}"
         return ("py3", "none", plat)                  # no CPython ABI is used: one wheel for every Python 3
 
