@@ -38,6 +38,15 @@ matcher.advance(vocab, token_id)              # the token the sampler chose
 Measured on Qwen3's vocabulary (151 936 tokens, Apple M4 Pro): a mask in about 15 µs median inside JSON, 73 µs in free
 text.
 
+## How it is built (five bricks, one way)
+
+`json` reads a schema's text. `schema` compiles the supported subset (a JSON Schema, or a description) to a node arena
+and refuses what it cannot enforce. `matcher` is the automaton: the state of one output against one compiled grammar,
+stepped by a byte or by a token step; its frames are private — the other modules ask it questions and step it.
+`vocab` is the token tree and the masks. `ffi` is the C ABI. Each imports only the ones before it, and none of them
+decides what to constrain or when: that is the caller's. No function is longer than 53 code lines (`clippy.toml`,
+denied in CI): the limit is this crate's own 95th percentile when it was set, and it only goes down.
+
 ## Building from source
 
 The crate pins its toolchain (`rust-toolchain.toml`). `pip install .` builds the library with `cargo` and places it in

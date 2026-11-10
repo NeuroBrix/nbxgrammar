@@ -1,6 +1,6 @@
 [package]
 name = "nbxgrammar"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "NeuroBrix's grammar engine for constrained decoding: JSON Schema and tool-call envelopes to per-step token masks (std only)"
 license = "Apache-2.0"

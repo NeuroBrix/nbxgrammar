@@ -2,22 +2,23 @@
 //! bytes in as (pointer, length); a refusal is a return code or a null handle with its message written into the caller's
 //! buffer. The caller keeps a grammar alive while matchers made from it live.
 use crate::json::parse;
-use crate::matcher::{Frame, Matcher};
+use crate::matcher::{Matcher, State};
 use crate::schema::{compile, compile_description, Schema};
 use crate::vocab::Vocab;
 use std::slice;
 
 pub struct MatcherHandle {
     schema: *const Schema,
-    stack: Vec<Frame>,
+    state: Option<State>,
 }
 
 fn with_matcher<R>(h: &mut MatcherHandle, f: impl FnOnce(&mut Matcher) -> R) -> R {
     // SAFETY: the caller keeps the grammar alive while the matcher lives (the ABI's contract)
     let schema = unsafe { &*h.schema };
-    let mut m = Matcher { schema, stack: std::mem::take(&mut h.stack) };
+    let state = h.state.take().expect("a matcher handle holds its state between calls");
+    let mut m = Matcher::resume(schema, state).expect("the handle's state was made against the handle's grammar");
     let r = f(&mut m);
-    h.stack = m.stack;
+    h.state = Some(m.suspend());
     r
 }
 
@@ -88,8 +89,7 @@ pub extern "C" fn ng_grammar_free(s: *mut Schema) {
 #[no_mangle]
 pub extern "C" fn ng_matcher_new(s: *const Schema) -> *mut MatcherHandle {
     let schema = unsafe { &*s };
-    let stack = Matcher::new(schema).stack;
-    Box::into_raw(Box::new(MatcherHandle { schema: s, stack }))
+    Box::into_raw(Box::new(MatcherHandle { schema: s, state: Some(Matcher::new(schema).suspend()) }))
 }
 
 #[no_mangle]

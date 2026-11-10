@@ -96,32 +96,10 @@ impl Compiler {
             return Ok(self.push(Node::Seq(ids)));
         }
         if let Some(Json::Array(alts)) = d.get("choice") {
-            let mut prefixes = Vec::new();
-            let mut then = Vec::new();
-            for a in alts {
-                let p = match a.get("lit") { Some(Json::Str(s)) if !s.is_empty() => s.as_bytes().to_vec(),
-                                             _ => return Err("description: a choice without its literal".into()) };
-                prefixes.push(p);
-                then.push(self.part(a.get("then").ok_or("description: a choice without then")?)?);
-            }
-            for i in 0..prefixes.len() { for j in 0..prefixes.len() {
-                if i != j && prefixes[j].starts_with(&prefixes[i]) {
-                    return Err("description: a choice whose literal is a prefix of another's".into());
-                }
-            }}
-            if prefixes.is_empty() || prefixes.len() > MAX_KEYS { return Err("description: a choice of 1..=64".into()); }
-            return Ok(self.push(Node::Choice { prefixes, then }));
+            return self.part_choice(alts);
         }
         if let Some(r) = d.get("repeat") {
-            let num = |k: &str, dflt: u32| -> Result<u32, String> { match d.get(k) {
-                None => Ok(dflt), Some(Json::Number(n)) => n.parse().map_err(|_| format!("description: {k}")),
-                _ => Err(format!("description: {k}")) } };
-            let (min, max) = (num("min", 0)?, num("max", u32::MAX)?);
-            if min > max || max == 0 { return Err("description: repeat min..=max with max >= 1".into()); }
-            let sep = match d.get("sep") { None => Vec::new(), Some(Json::Str(s)) => s.as_bytes().to_vec(),
-                                           _ => return Err("description: sep".into()) };
-            let node = self.part(r)?;
-            return Ok(self.push(Node::Repeat { node, min, max, sep }));
+            return self.part_repeat(d, r);
         }
         if d.get("until").is_some() {
             let term = text("until")?;
@@ -155,22 +133,91 @@ impl Compiler {
         r
     }
 
+    /// A choice by literal prefix: no literal a prefix of another's (the first byte that differs decides), 1..=64.
+    fn part_choice(&mut self, alts: &[Json]) -> Result<usize, String> {
+        let mut prefixes = Vec::new();
+        let mut then = Vec::new();
+        for a in alts {
+            let p = match a.get("lit") { Some(Json::Str(s)) if !s.is_empty() => s.as_bytes().to_vec(),
+                                         _ => return Err("description: a choice without its literal".into()) };
+            prefixes.push(p);
+            then.push(self.part(a.get("then").ok_or("description: a choice without then")?)?);
+        }
+        for i in 0..prefixes.len() { for j in 0..prefixes.len() {
+            if i != j && prefixes[j].starts_with(&prefixes[i]) {
+                return Err("description: a choice whose literal is a prefix of another's".into());
+            }
+        }}
+        if prefixes.is_empty() || prefixes.len() > MAX_KEYS { return Err("description: a choice of 1..=64".into()); }
+        Ok(self.push(Node::Choice { prefixes, then }))
+    }
+
+    /// A repetition of `r`, `min..=max` times, its items separated by `sep` when one is given.
+    fn part_repeat(&mut self, d: &Json, r: &Json) -> Result<usize, String> {
+        let num = |k: &str, dflt: u32| -> Result<u32, String> { match d.get(k) {
+            None => Ok(dflt), Some(Json::Number(n)) => n.parse().map_err(|_| format!("description: {k}")),
+            _ => Err(format!("description: {k}")) } };
+        let (min, max) = (num("min", 0)?, num("max", u32::MAX)?);
+        if min > max || max == 0 { return Err("description: repeat min..=max with max >= 1".into()); }
+        let sep = match d.get("sep") { None => Vec::new(), Some(Json::Str(s)) => s.as_bytes().to_vec(),
+                                       _ => return Err("description: sep".into()) };
+        let node = self.part(r)?;
+        Ok(self.push(Node::Repeat { node, min, max, sep }))
+    }
+
+    /// Every keyword of a schema object is one this compiler enforces or one it may ignore; any other is refused by
+    /// name, and `additionalProperties` only as `false`.
+    fn known_keywords(kv: &[(String, Json)]) -> Result<(), String> {
+    for (k, v) in kv {
+        let known = matches!(k.as_str(), "type" | "properties" | "required" | "additionalProperties" | "items" |
+            "minItems" | "maxItems" | "enum" | "const" | "anyOf" | "$ref" | "$defs" | "definitions") || IGNORED.contains(&k.as_str());
+        if !known {
+            return Err(format!("unsupported: the keyword {k:?}"));
+        }
+        if k == "additionalProperties" && *v != Json::Bool(false) {
+            return Err("unsupported: additionalProperties other than false".into());
+        }
+    }
+        Ok(())
+    }
+
+    /// A `const` or an `enum` (`key`): its values as literals, each of the declared type when one is declared.
+    fn literals(&mut self, s: &Json, key: &str) -> Result<usize, String> {
+        let vals: Vec<Json> = match (s.get("const"), s.get("enum")) {
+            (Some(c), _) => vec![c.clone()],
+            (None, Some(Json::Array(a))) if !a.is_empty() => a.clone(),
+            _ => return Err("unsupported: an empty or non-array enum".into()),
+        };
+        if vals.len() > MAX_KEYS {
+            return Err(format!("unsupported: an enum of {} values (at most {MAX_KEYS})", vals.len()));
+        }
+        if let Some(t) = s.get("type") {
+            let types: Vec<&str> = match t {
+                Json::Str(x) => vec![x.as_str()],
+                Json::Array(xs) => xs.iter().filter_map(|x| x.as_str()).collect(),
+                _ => return Err("unsupported: a non-string type".into()),
+            };
+            for v in &vals {
+                let kind = match v {
+                    Json::Null => "null", Json::Bool(_) => "boolean", Json::Str(_) => "string",
+                    Json::Array(_) => "array", Json::Object(_) => "object",
+                    Json::Number(n) => if n.contains(['.', 'e', 'E']) { "number" } else { "integer" },
+                };
+                if !types.iter().any(|t| *t == kind || (*t == "number" && kind == "integer")) {
+                    return Err(format!("unsupported: the {key} value {} is not of the type {t:?}", v.to_compact()));
+                }
+            }
+        }
+        Ok(self.push(Node::Literals(vals.iter().map(|v| v.to_compact().into_bytes()).collect())))
+    }
+
     fn node_inner(&mut self, s: &Json) -> Result<usize, String> {
         let kv = match s {
             Json::Object(kv) => kv,
             Json::Bool(true) => return Err("unsupported: the schema `true` (any value)".into()),
             _ => return Err("unsupported: a schema that is not an object".into()),
         };
-        for (k, v) in kv {
-            let known = matches!(k.as_str(), "type" | "properties" | "required" | "additionalProperties" | "items" |
-                "minItems" | "maxItems" | "enum" | "const" | "anyOf" | "$ref" | "$defs" | "definitions") || IGNORED.contains(&k.as_str());
-            if !known {
-                return Err(format!("unsupported: the keyword {k:?}"));
-            }
-            if k == "additionalProperties" && *v != Json::Bool(false) {
-                return Err("unsupported: additionalProperties other than false".into());
-            }
-        }
+        Self::known_keywords(kv)?;
         // the keywords each branch enforces: one beside it that the branch would not apply is refused, never dropped
         let enforced: Vec<&str> = kv.iter().map(|(k, _)| k.as_str())
             .filter(|k| !IGNORED.contains(k) && !matches!(*k, "$defs" | "definitions")).collect();
@@ -198,32 +245,7 @@ impl Compiler {
         if s.get("const").is_some() || s.get("enum").is_some() {
             let key = if s.get("const").is_some() { "const" } else { "enum" };
             alone(key, &["type"])?;
-            let vals: Vec<Json> = match (s.get("const"), s.get("enum")) {
-                (Some(c), _) => vec![c.clone()],
-                (None, Some(Json::Array(a))) if !a.is_empty() => a.clone(),
-                _ => return Err("unsupported: an empty or non-array enum".into()),
-            };
-            if vals.len() > MAX_KEYS {
-                return Err(format!("unsupported: an enum of {} values (at most {MAX_KEYS})", vals.len()));
-            }
-            if let Some(t) = s.get("type") {
-                let types: Vec<&str> = match t {
-                    Json::Str(x) => vec![x.as_str()],
-                    Json::Array(xs) => xs.iter().filter_map(|x| x.as_str()).collect(),
-                    _ => return Err("unsupported: a non-string type".into()),
-                };
-                for v in &vals {
-                    let kind = match v {
-                        Json::Null => "null", Json::Bool(_) => "boolean", Json::Str(_) => "string",
-                        Json::Array(_) => "array", Json::Object(_) => "object",
-                        Json::Number(n) => if n.contains(['.', 'e', 'E']) { "number" } else { "integer" },
-                    };
-                    if !types.iter().any(|t| *t == kind || (*t == "number" && kind == "integer")) {
-                        return Err(format!("unsupported: the {key} value {} is not of the type {t:?}", v.to_compact()));
-                    }
-                }
-            }
-            return Ok(self.push(Node::Literals(vals.iter().map(|v| v.to_compact().into_bytes()).collect())));
+            return self.literals(s, key);
         }
         match s.get("type") {
             Some(Json::Str(t)) => self.typed(t, s),

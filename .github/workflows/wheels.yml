@@ -42,6 +42,9 @@ jobs:
       - name: The crate's oracle tests
         if: runner.os != 'Linux'
         run: cargo test --release --locked
+      - name: No function over the crate's limit (clippy.toml)
+        if: runner.os == 'macOS' && matrix.arch == 'arm64'
+        run: rustup component add clippy && cargo clippy --locked -- -D clippy::too_many_lines
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.arch }}

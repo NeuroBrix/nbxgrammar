@@ -1,0 +1,4 @@
+# The longest a function may be, in code lines (clippy::too_many_lines, denied in CI): nbxgrammar's own 95th percentile
+# when the limit was set (53, measured on 0.1.0, 2026-11-10; NeuroBrix's bricks rule draws a limit from the package's
+# own state and never raises it). Lower it when the percentile falls.
+too-many-lines-threshold = 53

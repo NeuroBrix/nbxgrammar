@@ -1,6 +1,6 @@
 //! The tokenizer's tokens as bytes, in a flat trie, with the masks precomputed once per vocabulary: XGrammar's split of
 //! context-independent tokens (decided by the lexical state alone, cached) from the rest (walked at each step).
-use crate::matcher::{Frame, Matcher};
+use crate::matcher::Matcher;
 
 struct Trie {
     byte: Vec<u8>,
@@ -140,7 +140,7 @@ impl Vocab {
     /// The tokens allowed after what `m` has consumed, into `out` (ceil(vocab / 32) int32 words).
     pub fn mask(&self, m: &Matcher, out: &mut [u32]) {
         out.iter_mut().for_each(|w| *w = 0);
-        if matches!(m.stack.last(), Some(Frame::Str { esc: 0, need: 0, .. })) {
+        if m.in_plain_string() {
             out.copy_from_slice(&self.string_safe);
             self.string_rest.walk(0, m, out);
         } else if let Some(first) = m.until_clean() {
@@ -168,7 +168,7 @@ impl Vocab {
     /// The token chosen: its bytes consumed (an EOS when the output may end); Err when the grammar refuses it.
     pub fn advance(&self, m: &mut Matcher, token: u32) -> Result<(), String> {
         if self.eos.contains(&token) {
-            return if m.accepting() { m.stack.clear(); m.stack.push(Frame::Done); Ok(()) }
+            return if m.accepting() { m.finish(); Ok(()) }
                    else { Err(format!("token {token} (end of sequence) before the output may end")) };
         }
         if m.token_steps().contains(&token) {
