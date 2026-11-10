@@ -34,8 +34,11 @@ fn write_err(msg: &str, buf: *mut u8, cap: usize) {
 /// The vocabulary: `n` tokens whose bytes follow each other in `data`, `lens[i]` each (u32::MAX: a token no grammar emits).
 /// Null when an end-of-sequence id lies past the `n` tokens (it would index past every mask: refused, never a panic
 /// across the ABI).
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_vocab_new(data: *const u8, lens: *const u32, n: u32, eos: *const u32, n_eos: u32) -> *mut Vocab {
+pub unsafe extern "C" fn ng_vocab_new(data: *const u8, lens: *const u32, n: u32, eos: *const u32, n_eos: u32) -> *mut Vocab {
     if unsafe { slice::from_raw_parts(eos, n_eos as usize) }.iter().any(|&e| e >= n) {
         return std::ptr::null_mut();
     }
@@ -51,14 +54,20 @@ pub extern "C" fn ng_vocab_new(data: *const u8, lens: *const u32, n: u32, eos: *
     Box::into_raw(Box::new(Vocab::new(toks, eos)))
 }
 
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_vocab_free(v: *mut Vocab) {
+pub unsafe extern "C" fn ng_vocab_free(v: *mut Vocab) {
     if !v.is_null() { unsafe { drop(Box::from_raw(v)); } }
 }
 
 /// A JSON schema's text compiled; null (and the refusal's message in `err`) when it cannot be enforced.
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_grammar_json_schema(text: *const u8, len: usize, err: *mut u8, err_cap: usize) -> *mut Schema {
+pub unsafe extern "C" fn ng_grammar_json_schema(text: *const u8, len: usize, err: *mut u8, err_cap: usize) -> *mut Schema {
     let text = unsafe { slice::from_raw_parts(text, len) };
     let r = std::str::from_utf8(text).map_err(|_| "the schema is not UTF-8".to_string())
         .and_then(parse).and_then(|j| compile(&j));
@@ -70,8 +79,11 @@ pub extern "C" fn ng_grammar_json_schema(text: *const u8, len: usize, err: *mut 
 
 /// A grammar description's text (lit / schema / seq / choice / repeat / until / token, as JSON) compiled; null (and the
 /// refusal's message in `err`) when it cannot be enforced.
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_grammar_description(text: *const u8, len: usize, err: *mut u8, err_cap: usize) -> *mut Schema {
+pub unsafe extern "C" fn ng_grammar_description(text: *const u8, len: usize, err: *mut u8, err_cap: usize) -> *mut Schema {
     let text = unsafe { slice::from_raw_parts(text, len) };
     let r = std::str::from_utf8(text).map_err(|_| "the description is not UTF-8".to_string())
         .and_then(parse).and_then(|j| compile_description(&j));
@@ -81,25 +93,37 @@ pub extern "C" fn ng_grammar_description(text: *const u8, len: usize, err: *mut 
     }
 }
 
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_grammar_free(s: *mut Schema) {
+pub unsafe extern "C" fn ng_grammar_free(s: *mut Schema) {
     if !s.is_null() { unsafe { drop(Box::from_raw(s)); } }
 }
 
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_matcher_new(s: *const Schema) -> *mut MatcherHandle {
+pub unsafe extern "C" fn ng_matcher_new(s: *const Schema) -> *mut MatcherHandle {
     let schema = unsafe { &*s };
     Box::into_raw(Box::new(MatcherHandle { schema: s, state: Some(Matcher::new(schema).suspend()) }))
 }
 
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_matcher_free(m: *mut MatcherHandle) {
+pub unsafe extern "C" fn ng_matcher_free(m: *mut MatcherHandle) {
     if !m.is_null() { unsafe { drop(Box::from_raw(m)); } }
 }
 
 /// The next step's mask into `out` (`words` int32 = ceil(vocab / 32)); -1 when `words` is not the vocabulary's.
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_mask(v: *const Vocab, m: *mut MatcherHandle, out: *mut u32, words: usize) -> i32 {
+pub unsafe extern "C" fn ng_mask(v: *const Vocab, m: *mut MatcherHandle, out: *mut u32, words: usize) -> i32 {
     let v = unsafe { &*v };
     if words != v.words() { return -1; }
     let out = unsafe { slice::from_raw_parts_mut(out, words) };
@@ -108,13 +132,19 @@ pub extern "C" fn ng_mask(v: *const Vocab, m: *mut MatcherHandle, out: *mut u32,
 }
 
 /// The token chosen; 0, or 1 when the grammar refuses it (the matcher then unchanged).
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_advance(v: *const Vocab, m: *mut MatcherHandle, token: u32) -> i32 {
+pub unsafe extern "C" fn ng_advance(v: *const Vocab, m: *mut MatcherHandle, token: u32) -> i32 {
     let v = unsafe { &*v };
     with_matcher(unsafe { &mut *m }, |mm| if v.advance(mm, token).is_ok() { 0 } else { 1 })
 }
 
+/// # Safety
+/// Every pointer is one this ABI returned and has not freed, or a caller's buffer of the stated length (the
+/// module's contract above).
 #[no_mangle]
-pub extern "C" fn ng_accepting(m: *mut MatcherHandle) -> i32 {
+pub unsafe extern "C" fn ng_accepting(m: *mut MatcherHandle) -> i32 {
     with_matcher(unsafe { &mut *m }, |mm| mm.accepting() as i32)
 }
