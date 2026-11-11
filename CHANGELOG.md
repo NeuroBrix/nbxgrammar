@@ -4,7 +4,7 @@ All notable changes to nbxgrammar are documented in this file. The format is bas
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - unreleased (on main; published with the next version that changes what a user sees)
+## [0.1.1] - 2026-11-11
 
 ### Changed
 - **Nothing a caller sees**: the same masks, the same C ABI (the ten exported symbols, unchanged), the same speed
@@ -19,7 +19,7 @@ All notable changes to nbxgrammar are documented in this file. The format is bas
   above, reproduced by it with the file untouched; `tests/contract.rs`: the matcher's contract from outside the crate.
 - CI denies `clippy::too_many_lines` at the threshold of `clippy.toml`.
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-11-10
 
 ### Added
 - **The grammar engine**: a JSON Schema subset and grammar descriptions (literals, schemas, sequences, choices,
