@@ -1,4 +1,4 @@
-//! Mask cost per step on a real vocabulary (the owner's gate: < 1 ms CPU on ~150 k tokens): random walks over the
+//! Mask cost per step on a real vocabulary (the project's gate: < 1 ms CPU on ~150 k tokens): random walks over the
 //! oracle's schemas; median / p99 / max per step, and the schema compile time. Usage: bench <vocab file>
 use nbxgrammar::{json::parse, matcher::Matcher, schema::compile, vocab::Vocab};
 use std::time::Instant;

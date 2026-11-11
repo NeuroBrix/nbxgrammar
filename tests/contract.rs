@@ -1,5 +1,5 @@
 //! The matcher's contract seen from outside the crate: its frames are not reachable; what the vocabulary and the C ABI
-//! need of it are questions and steps (the owner's bricks rule, 2026-11-10 — nbxgrammar 0.1.1).
+//! need of it are questions and steps (NeuroBrix's bricks rule — nbxgrammar 0.1.1).
 use nbxgrammar::json::parse;
 use nbxgrammar::matcher::Matcher;
 use nbxgrammar::schema::compile;

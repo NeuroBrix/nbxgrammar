@@ -3,7 +3,7 @@
 use crate::schema::{Node, Schema, MAX_NUMBER};
 
 /// Whitespace inside a JSON value: at most ONE space at each place JSON allows whitespace, never a newline or a tab
-/// (Outlines' rule: small models loop on wider whitespace - TinyLlama wrote 32 newlines before its object on the rack,
+/// (Outlines' rule: small models loop on wider whitespace - TinyLlama wrote 32 newlines before its object in our tests,
 /// 2026-11-10; vLLM issue #38696); none before the root value and none after it (llguidance's default).
 pub const WS_MAX: u8 = 1;
 
@@ -290,7 +290,7 @@ impl<'s> Matcher<'s> {
     fn start_value(&mut self, node: u32, ws: u8, b: u8) -> bool {
         let top = self.stack.len() - 1;
         // a space only before a value INSIDE a JSON array or object: never before a JSON root, whether it is the grammar's
-        // root or a part of a description (after a literal, in a sequence: the rack's '\n\n {' after a reasoning, D5)
+        // root or a part of a description (after a literal, in a sequence: a model's '\n\n {' after its reasoning was measured)
         let inside = self.stack.len() >= 2
             && matches!(self.stack[self.stack.len() - 2], Frame::Arr { .. } | Frame::Obj { .. });
         if is_ws(b) && self.json_value(node) && inside {

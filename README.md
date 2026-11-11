@@ -6,7 +6,7 @@ can only be what the schema or the format allows. It is the engine behind `respo
 `tool_choice` in [NeuroBrix](https://github.com/NeuroBrix/neurobrix)'s OpenAI-compatible server.
 
 Written in Rust with the standard library only, loaded from Python with `ctypes` (no binding library). One wheel per
-platform serves every Python 3.
+platform serves every Python 3.9 or later.
 
 ```bash
 pip install nbxgrammar
@@ -35,8 +35,9 @@ matcher.advance(vocab, token_id)              # the token the sampler chose
 - **Whitespace**: at most one space where JSON allows whitespace inside a value, never a newline, and none around a
   JSON root.
 
-Measured on Qwen3's vocabulary (151 936 tokens, Apple M4 Pro): a mask in about 15 µs median inside JSON, 73 µs in free
-text.
+Measured on Qwen3's vocabulary (151 936 tokens, Apple M4 Pro), two different statistics: by kind of position on
+generated answers, a mask takes about 15 µs median inside JSON structure and 73 µs in free text; the benchmark of
+`examples/bench.rs` (random walks over the test schemas, every step counted) reads about 92 µs median a step.
 
 ## How it is built (five bricks, one way)
 

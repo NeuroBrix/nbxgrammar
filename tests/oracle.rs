@@ -251,7 +251,7 @@ fn a_reasoning_closes_by_its_end_token_and_the_cached_until_mask_equals_the_brut
 
 #[test]
 fn a_schema_inside_a_description_takes_no_space_before_its_root() {
-    // D5 (the rack's Thinking json_schema answer: "\n\n {"): the schema part of a sequence is a JSON root too
+    // a reasoning model's json_schema answer began "\n\n {" (measured): the schema part of a sequence is a JSON root too
     let d = parse(r#"{"seq": [{"lit": "x\n\n"}, {"schema": {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"]}}]}"#).unwrap();
     let g = compile_description(&d).unwrap();
     let ok = |t: &str| { let mut m = Matcher::new(&g); m.feed_all(t.as_bytes()) && m.accepting() };
